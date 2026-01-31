@@ -17,15 +17,16 @@ namespace TodoApp.Repositories
             _context = context;
         }
 
-        public async Task<List<TodoItem>> GetF(bool? isCompleted, string? priority)
+        public async Task<List<TodoItem>> GetF(bool? isCompleted, Priority? priority)
         {
             IQueryable<TodoItem> query = _context.Set<TodoItem>().AsQueryable();
 
             if (isCompleted is not null)
                 query = query.Where(x => x.IsCompleted == isCompleted);
 
+
             if (priority is not null)
-                query = query.Where(x => x.Priority == (Priority)Enum.Parse(typeof(Priority), priority));
+                query = query.Where(x => x.Priority ==  priority);
 
             return await query.ToListAsync();
         }
@@ -45,7 +46,7 @@ namespace TodoApp.Repositories
 
             return todoItem;
         }
-        public async Task<TodoItem?> DeleteAsync(TodoItem? todoItem)
+        public async Task<TodoItem?> DeleteAsync(TodoItem todoItem)
         {
 
             _context.TodoItems.Remove(todoItem);
@@ -55,7 +56,7 @@ namespace TodoApp.Repositories
             return todoItem;
         }
 
-        public async Task<TodoItem?> UpdateAsync(TodoItem? todoItem)
+        public async Task<TodoItem?> UpdateAsync(TodoItem todoItem)
         {
 
             _context.TodoItems.Update(todoItem);

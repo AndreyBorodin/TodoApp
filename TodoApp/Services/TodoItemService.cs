@@ -1,8 +1,10 @@
-﻿using Mapster;
+﻿using ErrorOr;
+using Mapster;
+using System.ComponentModel.DataAnnotations;
 using TodoApp.DTO;
 using TodoApp.Models;
 using TodoApp.Repositories;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+
 
 namespace TodoApp.Services
 {
@@ -14,48 +16,83 @@ namespace TodoApp.Services
         {
             _todoItemRepository = todoItemRepository;
         }
-        public async Task<List<TodoItemDto>> GetAll(bool? isCompleted, string? priority)
+        public async Task<List<TodoItemDto>> GetAll(bool? isCompleted, Priority? priority)
         {
             var todoItemList = await _todoItemRepository.GetF(isCompleted, priority);
 
             return todoItemList.Adapt<List<TodoItemDto>>();
         }
-        public async Task<TodoItemDto> CreateAsync(TodoItemCreateDto entity)
+        public async Task<ErrorOr<TodoItemDto>> CreateAsync(TodoItemCreateDto entity)
         {
+            Error? error = ValidateResource(entity.Title);
+            if (error is not null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { error.Value });
+
             var todoItem = await _todoItemRepository.Create(entity.Adapt<TodoItem>());
 
             return todoItem.Adapt<TodoItemDto>();
         }
-        public async Task<TodoItemDto> GetBy(int id)
+        public async Task<ErrorOr<TodoItemDto>> GetBy(int id)
         {
+            
             TodoItem? todoItem = await _todoItemRepository.GetBy(id);
+
+            if (todoItem is null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { Error.NotFound() });
 
             return todoItem.Adapt<TodoItemDto>();
         }
-        public async Task<TodoItemDto?> DeleteAsync(int id)
+        public async Task<ErrorOr<TodoItemDto>> DeleteAsync(int id)
         {
+
             TodoItem? todoItem = await _todoItemRepository.GetBy(id);
 
+            if (todoItem == null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { Error.NotFound() });
 
             await _todoItemRepository.DeleteAsync(todoItem);
 
-            return todoItem.Adapt<TodoItemDto>();
+            return todoItem.Adapt<TodoItemDto>(); 
         }
-        public async Task<TodoItemDto?> PatchAsync(int id)
+        public async Task<ErrorOr<TodoItemDto>> PatchAsync(int id)
         {
-            TodoItem? todoItem = await _todoItemRepository.GetBy(id);
+
+            TodoItem? todoItem = await _todoItemRepository.GetBy(id); 
+            if (todoItem == null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { Error.NotFound() });
 
             todoItem.IsCompleted = true;
+
+            todoItem.CompletedAt = DateTime.Now;
 
             await _todoItemRepository.UpdateAsync(todoItem);
 
             return todoItem.Adapt<TodoItemDto>();
         }
-        public async Task<TodoItemDto> UpdateAsync(TodoItemDto entity)
+        public async Task<ErrorOr<TodoItemDto>> UpdateAsync(TodoItemDto entity)
         {
+
+            Error? error = ValidateResource(entity.Title);
+            if (error is not null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { error.Value });
+
             TodoItem? todoItem = await _todoItemRepository.UpdateAsync(entity.Adapt<TodoItem>());
 
+            if (todoItem == null)
+                return ErrorOr<TodoItemDto>.From(new List<Error> { Error.NotFound() });
+
             return todoItem.Adapt<TodoItemDto>();
+        }
+
+        private Error? ValidateResource(string title)
+        {
+
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                return Error.Validation("title", "Поле название должно быть заполнено");
+            }
+
+            return default;
         }
 
 

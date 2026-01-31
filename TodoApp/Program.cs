@@ -1,6 +1,8 @@
+using ErrorOr;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.Design;
 using TodoApp.DataAccess;
 using TodoApp.DTO;
@@ -30,24 +32,97 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 
 
-app.MapPost("/api/todos", async (TodoItemCreateDto todoItemDto, ITodoItemService todoItemServic) => await todoItemServic.CreateAsync(todoItemDto));
+app.MapPost("/api/todos", async (TodoItemCreateDto todoItemDto, ITodoItemService todoItemServic) =>
+{
+    var validationResults = new List<ValidationResult>();
+    var validationContext = new ValidationContext(todoItemDto);
+
+    // Проверка валидации модели  
+    if (!Validator.TryValidateObject(todoItemDto, validationContext, validationResults, true))
+    {
+        return Results.BadRequest(validationResults);
+    }
+
+    ErrorOr<TodoItemDto> result = await todoItemServic.CreateAsync(todoItemDto);
+
+    if (result.IsError && result.FirstError.Type == ErrorType.Validation)
+        return Results.BadRequest(result.FirstError.Description);
+
+    if (result.IsError && result.FirstError.Type == ErrorType.Conflict)
+        return Results.Conflict(result.FirstError.Description);
+
+    if (result.IsError)
+        return Results.Problem(result.FirstError.Description);
+
+    return Results.Ok(result.Value);
+});
 
 
-app.MapGet("/api/todos", async ( ITodoItemService todoItemServic, bool? isCompleted = null, string? priority = null) => await todoItemServic.GetAll(isCompleted, priority));
+app.MapGet("/api/todos", async ( ITodoItemService todoItemServic, bool? isCompleted = null, Priority? priority = null) => await todoItemServic.GetAll(isCompleted, priority));
 
-app.MapGet("/api/todos/{id:int}", async (int id, ITodoItemService todoItemServic) => await todoItemServic.GetBy(id));
+app.MapGet("/api/todos/{id:int}", async (int id, ITodoItemService todoItemServic) =>
+{
+    ErrorOr<TodoItemDto> result = await todoItemServic.GetBy(id);
 
-app.MapDelete("/api/todos/{id:int}", async (int id, ITodoItemService todoItemServic) => await todoItemServic.DeleteAsync(id));
+    if (result.IsError && result.FirstError.Type == ErrorType.NotFound)
+        return Results.NotFound();
 
-app.MapPatch("/api/todos/{id:int}/complete", async (int id, ITodoItemService todoItemServic) => await todoItemServic.PatchAsync(id));
+    if (result.IsError)
+        return Results.Problem(result.FirstError.Description);
 
-app.MapPut("/api/todos/{id:int}", async (int id, TodoItemDto todoItemDto, ITodoItemService todoItemServic) => await todoItemServic.UpdateAsync(todoItemDto));
+    return Results.Ok(result.Value);
+});
+
+app.MapDelete("/api/todos/{id:int}", async (int id, ITodoItemService todoItemServic) =>
+{ 
+    
+    ErrorOr<TodoItemDto> result = await todoItemServic.DeleteAsync(id);
+
+    if (result.IsError && result.FirstError.Type == ErrorType.NotFound)
+        return Results.NotFound();
+
+    if (result.IsError && result.FirstError.Type == ErrorType.Conflict)
+        return Results.Conflict(result.FirstError.Description);
+
+    if (result.IsError)
+        return Results.Problem(result.FirstError.Description);
+
+    return Results.NoContent();
+});
+
+app.MapPatch("/api/todos/{id:int}/complete", async (int id, ITodoItemService todoItemServic) =>
+{
+
+    ErrorOr<TodoItemDto> result = await todoItemServic.PatchAsync(id);
+
+    if (result.IsError && result.FirstError.Type == ErrorType.NotFound)
+        return Results.NotFound();
+
+    if (result.IsError)
+        return Results.Problem(result.FirstError.Description);
+
+    return Results.Ok(result.Value);
+});
 
 
+app.MapPut("/api/todos/{id:int}", async (int id, TodoItemDto todoItemDto, ITodoItemService todoItemService) =>
+{
+    var validationResults = new List<ValidationResult>();
+    var validationContext = new ValidationContext(todoItemDto);
 
+    // Проверка валидации модели  
+    if (!Validator.TryValidateObject(todoItemDto, validationContext, validationResults, true))
+    {
+        return Results.BadRequest(validationResults);
+    }
+
+    // Обновление элемента  
+    ErrorOr<TodoItemDto> result = await todoItemService.UpdateAsync(todoItemDto);
+    return Results.Ok(result.Value);
+});
 
 app.Run();
 
